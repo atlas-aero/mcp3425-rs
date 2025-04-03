@@ -27,14 +27,14 @@ dual_channel = []
 quad_channel = []
 
 [dependencies]
-byteorder = "1.2"
-embedded-hal = "0.2"
+byteorder = { version = "1.5.0", default-features = false }
+embedded-hal = "1.0.0"
 bitflags = "1.0"
 measurements = { version = "0.11", default-features = false, optional = true }
 
 [dev-dependencies]
-embedded-hal-mock = { version = "0.10", features = ["eh0"], default-features = false }
-linux-embedded-hal = "0.3"
+embedded-hal-mock = { version = "0.11.1", features = ["eh1"], default-features = false }
+linux-embedded-hal = "0.4.0"
 rstest = "0.18"
 
 [profile.release]

@@ -143,10 +143,8 @@
 extern crate bitflags;
 
 use byteorder::{BigEndian, ByteOrder};
-use embedded_hal::blocking::{
-    delay::DelayMs,
-    i2c::{Read, Write, WriteRead},
-};
+use embedded_hal::delay::DelayNs;
+use embedded_hal::i2c::I2c;
 
 #[cfg(feature = "measurements")]
 extern crate measurements;
@@ -462,10 +460,10 @@ pub struct MCP3425<I2C, D, M> {
     config: Option<Config>,
 }
 
-impl<I2C, D, E, M> MCP3425<I2C, D, M>
+impl<I2C, D, M> MCP3425<I2C, D, M>
 where
-    I2C: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
-    D: DelayMs<u8>,
+    I2C: I2c,
+    D: DelayNs,
     M: ConversionMode,
 {
     /// Initialize the MCP3425 driver.
@@ -483,7 +481,7 @@ where
     }
 
     /// Read an i16 and the configuration register from the device.
-    fn read_i16_and_config(&mut self) -> Result<(i16, ConfigRegister), Error<E>> {
+    fn read_i16_and_config(&mut self) -> Result<(i16, ConfigRegister), Error<I2C::Error>> {
         let mut buf = [0, 0, 0];
         self.i2c.read(self.address, &mut buf).map_err(Error::I2c)?;
         let measurement = BigEndian::read_i16(&buf[0..2]);
@@ -498,7 +496,7 @@ where
         &self,
         measurement: i16,
         resolution: &Resolution,
-    ) -> Result<Voltage, Error<E>> {
+    ) -> Result<Voltage, Error<I2C::Error>> {
         // Handle saturation / out of range values
         if measurement == resolution.max() {
             return Err(Error::VoltageTooHigh);
@@ -520,10 +518,10 @@ where
     }
 }
 
-impl<I2C, D, E> MCP3425<I2C, D, OneShotMode>
+impl<I2C, D> MCP3425<I2C, D, OneShotMode>
 where
-    I2C: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
-    D: DelayMs<u8>,
+    I2C: I2c,
+    D: DelayNs,
 {
     /// Initialize the MCP3425 driver in One-Shot mode.
     ///
@@ -551,7 +549,7 @@ where
     /// Do a one-shot voltage measurement.
     ///
     /// Return the result in millivolts.
-    pub fn measure(&mut self, config: &Config) -> Result<Voltage, Error<E>> {
+    pub fn measure(&mut self, config: &Config) -> Result<Voltage, Error<I2C::Error>> {
         let command = ConfigRegister::NOT_READY.bits() | self.mode.bits() | config.bits();
 
         // Send command
@@ -584,10 +582,10 @@ where
     }
 }
 
-impl<I2C, D, E> MCP3425<I2C, D, ContinuousMode>
+impl<I2C, D> MCP3425<I2C, D, ContinuousMode>
 where
-    I2C: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
-    D: DelayMs<u8>,
+    I2C: I2c,
+    D: DelayNs,
 {
     /// Initialize the MCP3425 driver in Continuous Measurement mode.
     ///
@@ -621,7 +619,7 @@ where
     /// Note: Since the wait-until-ready logic needs to read the data register,
     /// when reading the measurement immediately after setting the
     /// configuration, that measurement will be returned as `NotFresh`.
-    pub fn set_config(&mut self, config: &Config) -> Result<(), Error<E>> {
+    pub fn set_config(&mut self, config: &Config) -> Result<(), Error<I2C::Error>> {
         // Set configuration
         let command = self.mode.bits() | config.bits();
         self.i2c
@@ -662,7 +660,7 @@ where
     ///
     /// If you poll faster than the sample rate,
     /// [`Error::NotReady`](enum.Error.html#variant.NotReady) will be returned.
-    pub fn read_measurement(&mut self) -> Result<Voltage, Error<E>> {
+    pub fn read_measurement(&mut self) -> Result<Voltage, Error<I2C::Error>> {
         // Make sure that the configuration has been written to the device
         let config = self.config.ok_or(Error::NotInitialized)?;
 
@@ -689,7 +687,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use embedded_hal_mock::eh0::{
+    use embedded_hal_mock::eh1::{
         delay::NoopDelay,
         i2c::{Mock as I2cMock, Transaction},
     };
@@ -723,6 +721,7 @@ mod tests {
     fn test_instantiation_continuous() {
         let expectations = [];
         let dev = I2cMock::new(&expectations);
+
         let adc = MCP3425::continuous(dev, 0x42, NoopDelay);
         adc.destroy().done();
     }
